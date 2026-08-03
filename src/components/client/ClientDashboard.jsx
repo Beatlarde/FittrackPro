@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, Camera, TrendingUp, Utensils, LogOut, Dumbbell, Calendar, MoreHorizontal, Sparkles, Loader2, Flame, Trophy } from 'lucide-react';
 import { auth, db } from '../../firebase';
-import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { BACKEND_URL, SYSTEM_PROMPTS } from '../../config/constants';
 import { track } from '../../utils/analytics';
@@ -128,8 +128,19 @@ const ClientDashboard = ({ user }) => {
   const [logContent, setLogContent] = useState('');
   const [workoutData, setWorkoutData] = useState({ exercise: '', weight: '', reps: '' });
   const [isProcessingAI, setIsProcessingAI] = useState(false);
-  const [checkedEjercicios, setCheckedEjercicios] = useState([]);
-  const [checkedComidas, setCheckedComidas] = useState([]);
+  // Fecha de hoy en formato ISO (YYYY-MM-DD) — misma convención que dayReviews
+  const hoy = new Date().toISOString().split('T')[0];
+  const [checkedEjercicios, setCheckedEjercicios] = useState(user?.dailyProgress?.[hoy]?.ejercicios || []);
+  const [checkedComidas, setCheckedComidas] = useState(user?.dailyProgress?.[hoy]?.comidas || []);
+
+  // Re-sincronizar si Firestore trae progreso más reciente (otra pestaña/dispositivo/refresh)
+  useEffect(() => {
+    const remoto = user?.dailyProgress?.[hoy];
+    if (remoto) {
+      setCheckedEjercicios(remoto.ejercicios || []);
+      setCheckedComidas(remoto.comidas || []);
+    }
+  }, [user?.dailyProgress, hoy]);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showListaSuper, setShowListaSuper] = useState(false);
   const [showPlanes, setShowPlanes] = useState(false);
@@ -203,10 +214,11 @@ const ClientDashboard = ({ user }) => {
   const todayIndex = (new Date().getDay() + 6) % 7;
 
   const toggleEjercicio = (key) => {
+    const yaEstaba = checkedEjercicios.includes(key);
     setCheckedEjercicios(prev => {
-      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]; if (!prev.includes(key)) track('exercise_checked', { key });
+      const next = yaEstaba ? prev.filter(k => k !== key) : [...prev, key]; if (!yaEstaba) track('exercise_checked', { key });
       // Verificar si se completaron todos los ejercicios del día
-      if (!prev.includes(key) && planData) {
+      if (!yaEstaba && planData) {
         const todayPlan = planData[todayIndex];
         const totalEjHoy = todayPlan?.entrenamiento?.ejercicios?.length || 0;
         const doneEjHoy = next.filter(k => k.startsWith(`${todayIndex}-ej-`)).length;
@@ -217,8 +229,18 @@ const ClientDashboard = ({ user }) => {
       }
       return next;
     });
+    // Persistir en Firestore para que sobreviva reload / se pueda leer desde el wallpaper
+    updateDoc(doc(db, 'users', user.uid), {
+      [`dailyProgress.${hoy}.ejercicios`]: yaEstaba ? arrayRemove(key) : arrayUnion(key)
+    }).catch(() => {});
   };
-  const toggleComida = (key) => setCheckedComidas(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  const toggleComida = (key) => {
+    const yaEstaba = checkedComidas.includes(key);
+    setCheckedComidas(prev => yaEstaba ? prev.filter(k => k !== key) : [...prev, key]);
+    updateDoc(doc(db, 'users', user.uid), {
+      [`dailyProgress.${hoy}.comidas`]: yaEstaba ? arrayRemove(key) : arrayUnion(key)
+    }).catch(() => {});
+  };
 
   // Guardar alternativa elegida: calcular macros con IA y guardar en Firestore
   const handleSelectAlternativa = async (descripcion, momento) => {
