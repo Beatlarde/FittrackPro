@@ -9,6 +9,7 @@ import { calculate1RM, isPremium } from '../../utils/metrics';
 import { callGemini, getAuthToken } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import { getGoogleCalendarToken, createCalendarEvent } from '../../services/googleCalendar';
+import { downloadPlanICS } from '../../services/icsExport';
 import { applyTheme } from '../../utils/theme';
 import DailyHUD from '../shared/DailyHUD';
 import MultiPhotoModal from '../shared/MultiPhotoModal';
@@ -208,6 +209,20 @@ const ClientDashboard = ({ user }) => {
       if (e.message !== 'Popup cerrado') showToast('Error al sincronizar con Google Calendar');
     }
     setSyncingCalendar(false);
+  };
+
+  // Exportar el plan a Calendario de iOS (u otro calendario compatible con .ics).
+  // No requiere OAuth ni backend: Safari abre el archivo descargado y ofrece
+  // "Agregar todos" directo al Calendario nativo.
+  const exportarICS = () => {
+    if (!planData) { showToast('Genera tu plan primero'); return; }
+    try {
+      downloadPlanICS(planData, user);
+      track('ics_export', { uid: user.uid });
+      showToast('✅ Archivo de calendario descargado — ábrelo para agregarlo');
+    } catch (e) {
+      showToast('Error al generar el archivo de calendario');
+    }
   };
 
   // Día de la semana actual (0=Lun ... 6=Dom)
@@ -608,6 +623,11 @@ const ClientDashboard = ({ user }) => {
               {syncingCalendar
                 ? <><Loader2 className="w-4 h-4 animate-spin"/> Sincronizando...</>
                 : <><Calendar className="w-4 h-4 text-blue-500"/> Sincronizar con Google Calendar</>}
+            </button>
+            {/* Exportar a Calendario de iOS / cualquier app compatible con .ics */}
+            <button onClick={exportarICS}
+              className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-sm flex items-center justify-center gap-3 active:scale-95 transition-all shadow-sm">
+              <Calendar className="w-4 h-4 text-emerald-500"/> Exportar a Calendario de iOS
             </button>
           </div>
         )}
