@@ -16,6 +16,7 @@ const adminCoachRoutes = require('./routes/admin-coach');
 const solicitudCoachRoutes = require('./routes/solicitud-coach');
 const commsRoutes = require('./routes/comms');
 const demoRoutes = require('./routes/demo');
+const wallpaperRoutes = require('./routes/wallpaper');
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api', adminCoachRoutes);
 app.use('/api', solicitudCoachRoutes);
 app.use('/api', commsRoutes);
 app.use('/api', demoRoutes);
+app.use('/api', wallpaperRoutes);
 
 registerCrons();
 
