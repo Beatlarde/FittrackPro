@@ -225,6 +225,31 @@ const ClientDashboard = ({ user }) => {
     }
   };
 
+  // Generar (o regenerar) el link permanente de la imagen del wallpaper, para
+  // usar con la acción "Obtener contenido de URL" de Shortcuts. Regenerarlo
+  // invalida automáticamente cualquier link anterior.
+  const [wallpaperLink, setWallpaperLink] = useState(null);
+  const [generandoLink, setGenerandoLink] = useState(false);
+  const generarLinkWallpaper = async () => {
+    setGenerandoLink(true);
+    try {
+      const token = await getAuthToken();
+      const res = await fetch(`${BACKEND_URL}/wallpaper/generar-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      });
+      const data = await res.json();
+      const url = `${BACKEND_URL}/wallpaper/imagen.png?token=${data.token}`;
+      setWallpaperLink(url);
+      try { await navigator.clipboard.writeText(url); showToast('✅ Link copiado — pégalo en tu Shortcut'); }
+      catch { showToast('✅ Link generado — cópialo de aquí abajo'); }
+      track('wallpaper_link_generado', { uid: user.uid });
+    } catch (e) {
+      showToast('Error al generar el link del wallpaper');
+    }
+    setGenerandoLink(false);
+  };
+
   // Día de la semana actual (0=Lun ... 6=Dom)
   const todayIndex = (new Date().getDay() + 6) % 7;
 
@@ -629,6 +654,18 @@ const ClientDashboard = ({ user }) => {
               className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-sm flex items-center justify-center gap-3 active:scale-95 transition-all shadow-sm">
               <Calendar className="w-4 h-4 text-emerald-500"/> Exportar a Calendario de iOS
             </button>
+            {/* Link permanente para el Shortcut de wallpaper */}
+            <button onClick={generarLinkWallpaper} disabled={generandoLink}
+              className="w-full py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-sm flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50 shadow-sm">
+              {generandoLink
+                ? <><Loader2 className="w-4 h-4 animate-spin"/> Generando...</>
+                : <><Sparkles className="w-4 h-4 text-purple-500"/> Generar link de wallpaper</>}
+            </button>
+            {wallpaperLink && (
+              <div className="bg-slate-800 rounded-2xl p-4 text-xs text-slate-300 break-all">
+                {wallpaperLink}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'photos' && (
