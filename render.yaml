@@ -1,0 +1,81 @@
+# Blueprint de Render: crea el backend y el frontend de FitTrack Pro.
+# En Render: New > Blueprint > elegir este repo. Los valores marcados con
+# "sync: false" se piden en pantalla al crear (nunca se guardan en el repo).
+
+services:
+  # ---------- Backend (Express) ----------
+  - type: web
+    name: fittrackpro-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: FRONTEND_URL
+        value: https://fittrackpro.store
+      # El JSON de Firebase Admin se sube en Environment > Secret Files
+      # con el nombre exacto serviceAccountKey.json
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/serviceAccountKey.json
+      - key: CORS_EXTRA_ORIGINS
+        sync: false
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_PLAN_ID
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_PASS
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD
+        sync: false
+      - key: CLOUDINARY_PRESET
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: EXERCISEDB_KEY
+        sync: false
+
+  # ---------- Frontend (React + Vite, sitio estatico) ----------
+  - type: web
+    name: fittrackpro-web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_BACKEND_URL
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: VITE_FIREBASE_MEASUREMENT_ID
+        sync: false
+      - key: VITE_MP_PUBLIC_KEY
+        sync: false
+      - key: VITE_MP_PLAN_ID
+        sync: false
+      - key: VITE_GOOGLE_CALENDAR_CLIENT_ID
+        sync: false

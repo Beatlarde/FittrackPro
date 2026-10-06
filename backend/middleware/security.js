@@ -11,7 +11,10 @@ const allowedOrigins = [
   'https://fittrackpro.store',
   'https://www.fittrackpro.store',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  // Orígenes extra separados por coma (ej. la URL *.onrender.com mientras
+  // se prueba antes de apuntar el dominio). Opcional.
+  ...(process.env.CORS_EXTRA_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)
 ];
 
 const corsConfig = cors({

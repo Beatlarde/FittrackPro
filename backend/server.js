@@ -20,6 +20,10 @@ const wallpaperRoutes = require('./routes/wallpaper');
 
 const app = express();
 
+// Render (y cualquier PaaS) pone la app detrás de un proxy: sin esto, el rate
+// limit ve la misma IP para todos los usuarios y los bloquea en conjunto.
+app.set('trust proxy', 1);
+
 app.use(helmetConfig);
 app.use(corsConfig);
 app.use(express.json({ limit: '10mb' }));
