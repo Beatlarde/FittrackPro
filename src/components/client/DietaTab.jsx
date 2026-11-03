@@ -11,6 +11,14 @@ import MacroCircle from '../shared/MacroCircle';
 
 const DietaTab = ({ planRaw, checkedComidas, onToggleComida, onSelectAlternativa, onListaSuper, userPremium, uid, daysUnlocked, startDayIndex, todayIndex }) => {
   const [selectedDay, setSelectedDay] = useState(todayIndex ?? 0);
+  // Si la app se queda abierta de un día para otro (sin recargar), "todayIndex"
+  // cambia solo pero "selectedDay" no — y entonces los checks de comida se
+  // siguen guardando bajo el día de ayer, que es justo lo que buscaba el
+  // wallpaper de hoy y no encontraba. Al cambiar el día, saltamos la pestaña
+  // seleccionada de vuelta a "hoy" automáticamente.
+  useEffect(() => {
+    setSelectedDay(todayIndex ?? 0);
+  }, [todayIndex]);
   const [altComidas, setAltComidas] = useState({});
   const [usosFirestore, setUsosFirestore] = useState({});
   const [foodImages, setFoodImages] = useState({}); // { 'nombre comida': url }

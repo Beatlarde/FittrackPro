@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dumbbell, Loader2, Check } from 'lucide-react';
 import { BACKEND_URL } from '../../config/constants';
 import { getAuthToken } from '../../services/api';
 
 const EjercicioTab = ({ planRaw, checkedEjercicios, onToggleEjercicio, userPremium, uid, daysUnlocked, startDayIndex, todayIndex, userEquipment, onUnlockDay }) => {
   const [selectedDay, setSelectedDay] = useState(todayIndex ?? 0);
+  // Mismo arreglo que en DietaTab: si la app se queda abierta de un día para
+  // otro, resincronizamos la pestaña seleccionada a "hoy" para no seguir
+  // guardando los checks bajo el índice de ayer.
+  useEffect(() => {
+    setSelectedDay(todayIndex ?? 0);
+  }, [todayIndex]);
   const [altEjercicio, setAltEjercicio] = useState({});
   const [editandoEj, setEditandoEj] = useState(null);
   const [showEsfuerzo, setShowEsfuerzo] = useState(null);

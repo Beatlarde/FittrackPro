@@ -26,5 +26,43 @@
         });
       }
     </script>
+    <script>
+      // --- Auto-actualización al reabrir la app ---------------------------
+      // Los PWA agregados a la pantalla de inicio en iOS a veces se
+      // "reanudan" en vez de recargarse de verdad al reabrirlos, así que
+      // pueden quedar corriendo una versión vieja del código indefinidamente
+      // aunque el usuario los cierre y los vuelva a abrir. Cada vez que la
+      // app vuelve a primer plano, comparamos el bundle que tenemos cargado
+      // contra el que hay ahorita en el servidor; si cambió (hubo un
+      // deploy nuevo), recargamos solos, sin que el usuario tenga que
+      // quitar y volver a agregar el ícono manualmente.
+      (function () {
+        var currentScript = document.querySelector('script[type="module"]');
+        var currentSrc = currentScript ? currentScript.getAttribute('src') : null;
+        if (!currentSrc) return;
+
+        var checking = false;
+        function checkForUpdate() {
+          if (checking) return;
+          checking = true;
+          fetch('/index.html', { cache: 'no-store' })
+            .then(function (res) { return res.text(); })
+            .then(function (html) {
+              var match = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
+              var latestSrc = match ? match[1] : null;
+              if (latestSrc && latestSrc !== currentSrc) {
+                window.location.reload();
+              }
+            })
+            .catch(function () { /* sin conexión: seguimos con lo que ya está cargado */ })
+            .finally(function () { checking = false; });
+        }
+
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') checkForUpdate();
+        });
+        window.addEventListener('pageshow', checkForUpdate);
+      })();
+    </script>
   </body>
 </html>
