@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Camera, Sparkles, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { BACKEND_URL } from '../../config/constants';
+import { PHOTO_CATEGORIES } from '../../config/constants';
 import { callGeminiWithImages } from '../../services/api';
+import { subirArchivo } from '../../services/uploadMedia';
 import { useToast } from '../../hooks/useToast';
 
 const PhotosSection = ({ uid, isCoach = false, requestedCategory = null, userPremium = false }) => {
@@ -52,36 +53,8 @@ Responde en español, máximo 4 líneas por punto, sin títulos con asteriscos, 
     if (!file) return;
     setUploading(true);
     try {
-      // Convertir a JPEG via canvas (resuelve HEIC y otros formatos no soportados)
-      const jpegBlob = await new Promise((resolve) => {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-          URL.revokeObjectURL(url);
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          canvas.getContext('2d').drawImage(img, 0, 0);
-          canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.85);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          resolve(file); // fallback: subir original
-        };
-        img.src = url;
-      });
-
-      const formData = new FormData();
-      formData.append('file', jpegBlob, 'photo.jpg');
-      formData.append('uid', uid);
-      formData.append('category', category);
-
-      const res = await fetch(`${BACKEND_URL}/upload-photo`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (!data.url) throw new Error(data.error || 'Error al subir');
+      // Reduce a JPEG ≤1600 px, manda el token y tiene tiempo límite (services/uploadMedia.js)
+      await subirArchivo({ file, uid, category });
 
       showToast(`✅ Foto guardada — ${category}`);
     } catch (e) {

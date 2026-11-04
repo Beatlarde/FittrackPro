@@ -3,6 +3,7 @@ import { Camera, Loader2 } from 'lucide-react';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { BACKEND_URL } from '../../config/constants';
+import { subirArchivo } from '../../services/uploadMedia';
 import { isPremium } from '../../utils/metrics';
 import { useToast } from '../../hooks/useToast';
 
@@ -43,13 +44,10 @@ const OnboardingPhotos = ({ user, onComplete }) => {
     try {
       for (const { key } of FOTOS) {
         if (!fotos[key]) continue;
-        const formData = new FormData();
-        formData.append('file', fotos[key]);
-        formData.append('uid', user.uid);
-        formData.append('category', `onboarding_${key}`);
-        const res = await fetch(`${BACKEND_URL}/upload-photo`, { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.url) urls[key] = data.url;
+        try {
+          const data = await subirArchivo({ file: fotos[key], uid: user.uid, category: `onboarding_${key}` });
+          urls[key] = data.url;
+        } catch (err) { console.error(`Foto ${key} no se subió:`, err.message); }
       }
       // Guardar URLs en Firestore
       await updateDoc(doc(db, 'users', user.uid), { onboardingPhotos: urls, onboardingPhotosDate: Date.now() });

@@ -42,15 +42,27 @@
         if (!currentSrc) return;
 
         var checking = false;
+        // Freno de seguridad: como máximo una recarga automática cada 30 s.
+        // Evita ciclos infinitos si algo (p. ej. una caché) devuelve una versión vieja.
+        function puedeRecargar() {
+          try {
+            var ultima = parseInt(sessionStorage.getItem('ftp_ultima_recarga') || '0', 10);
+            if (Date.now() - ultima < 30000) return false;
+            sessionStorage.setItem('ftp_ultima_recarga', String(Date.now()));
+          } catch (e) { /* sin sessionStorage: se permite */ }
+          return true;
+        }
+
         function checkForUpdate() {
           if (checking) return;
           checking = true;
-          fetch('/index.html', { cache: 'no-store' })
+          // "/" + no-store + parámetro único: nunca debe salir de una caché
+          fetch('/?v=' + Date.now(), { cache: 'no-store' })
             .then(function (res) { return res.text(); })
             .then(function (html) {
               var match = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
               var latestSrc = match ? match[1] : null;
-              if (latestSrc && latestSrc !== currentSrc) {
+              if (latestSrc && latestSrc !== currentSrc && puedeRecargar()) {
                 window.location.reload();
               }
             })

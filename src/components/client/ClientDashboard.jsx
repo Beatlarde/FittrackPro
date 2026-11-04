@@ -7,6 +7,7 @@ import { BACKEND_URL, SYSTEM_PROMPTS } from '../../config/constants';
 import { track } from '../../utils/analytics';
 import { calculate1RM, isPremium } from '../../utils/metrics';
 import { callGemini, getAuthToken } from '../../services/api';
+import { subirArchivo } from '../../services/uploadMedia';
 import { useToast } from '../../hooks/useToast';
 import { getGoogleCalendarToken, createCalendarEvent } from '../../services/googleCalendar';
 import { downloadPlanICS } from '../../services/icsExport';
@@ -16,6 +17,7 @@ import MultiPhotoModal from '../shared/MultiPhotoModal';
 import PremiumBanner from '../shared/PremiumBanner';
 import CountdownTimer from '../shared/CountdownTimer';
 import PhotosSection from '../shared/PhotosSection';
+import SectionBoundary from '../shared/SectionBoundary';
 import ChatBubble from '../shared/ChatBubble';
 import MealSwapModal from './MealSwapModal';
 import AchievementsBoard from './AchievementsBoard';
@@ -26,6 +28,12 @@ import CoachNotesWidget from './CoachNotesWidget';
 import ListaSuperModal from './ListaSuperModal';
 import CoachMessageBanner from './CoachMessageBanner';
 import ChatMensajesCoach from './ChatMensajesCoach';
+
+// Nombres legibles para el aviso de SectionBoundary
+const NOMBRE_SECCION = {
+  inicio: 'Hoy', dieta: 'Dieta', ejercicio: 'Entreno', mas: 'Más opciones', tracker_full: 'Registros',
+  achievements: 'Logros y Calendario', photos: 'Fotos de progreso', chat: 'Chat con tu coach',
+};
 
 const ClientDashboard = ({ user }) => {
   const [logs, setLogs] = useState([]);
@@ -403,6 +411,7 @@ const ClientDashboard = ({ user }) => {
       </div>
 
       <div className="p-4 max-w-xl mx-auto">
+        <SectionBoundary key={activeTab} nombre={NOMBRE_SECCION[activeTab] || activeTab}>
         {/* Tab Inicio — Tracker completo */}
         {activeTab === 'inicio' && (
           <div className="space-y-4 animate-in fade-in">
@@ -711,13 +720,8 @@ const ClientDashboard = ({ user }) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   if (file.size > 50 * 1024 * 1024) { alert('El video no puede superar 50MB'); return; }
-                  const formData = new FormData();
-                  formData.append('file', file);
-                  formData.append('uid', user.uid);
-                  formData.append('category', 'tecnica_video');
                   try {
-                    const res = await fetch(`${BACKEND_URL}/upload-photo`, { method: 'POST', body: formData });
-                    const data = await res.json();
+                    const data = await subirArchivo({ file, uid: user.uid, category: 'tecnica_video' });
                     if (data.url) {
                       await updateDoc(doc(db, 'users', user.uid), {
                         tecnicaVideos: [...(user.tecnicaVideos || []), { url: data.url, ts: Date.now(), viewed: false }]
@@ -732,6 +736,7 @@ const ClientDashboard = ({ user }) => {
             <ChatMensajesCoach uid={user.uid} />
           </div>
         )}
+        </SectionBoundary>
       </div>
 
       {/* Modal: ¿Cómo estuvo tu día? */}

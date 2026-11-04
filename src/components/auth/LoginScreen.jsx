@@ -246,9 +246,11 @@ const LoginScreen = () => {
             const { signInAnonymously } = await import('firebase/auth');
             const result = await signInAnonymously(auth);
             const uid = result.user.uid;
+            // El backend exige el token de esta sesión anónima (ver docs/BITACORA.md, 2026-11-04)
+            const token = await result.user.getIdToken();
             await fetch(`${BACKEND_URL}/demo/crear-sesion`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify({ uid })
             });
           } catch(e) { console.error('Demo error:', e); }

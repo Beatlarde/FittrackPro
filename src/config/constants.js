@@ -9,3 +9,7 @@ export const SYSTEM_PROMPTS = {
 CRÍTICO: "calentamiento" y "ejercicios" son arrays SEPARADOS. El calentamiento tiene 4-6 movimientos de activación/movilidad específicos para los músculos del día. Los ejercicios son SOLO los principales de fuerza/hipertrofia con series y reps. NUNCA mezcles calentamiento dentro de ejercicios.
 Genera los 7 días de la semana. Los días de descanso tienen calentamiento:[] y ejercicios:[].`
 };
+
+// Categorías de fotos de progreso (antes vivía solo en CoachNotesWidget.jsx y
+// PhotosSection.jsx la usaba sin importarla → la sección tronaba desde 2026-08-03).
+export const PHOTO_CATEGORIES = ['Fotos iniciales', 'Avance 1 mes', 'Avance 2 meses', 'Avance 3 meses'];

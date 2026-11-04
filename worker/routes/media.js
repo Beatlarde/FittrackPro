@@ -3,7 +3,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../lib/auth.js';
 import { firestore, SERVER_TIMESTAMP } from '../lib/firestore.js';
-import { toBase64 } from '../lib/gemini.js';
 
 const r = new Hono();
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -51,17 +50,17 @@ r.post('/upload-photo', authMiddleware, async (c) => {
     if (!file || typeof file === 'string') return c.json({ error: 'archivo requerido' }, 400);
     if (file.size > MAX_BYTES) return c.json({ error: 'archivo demasiado grande' }, 413);
 
+    // Se reenvía el archivo tal cual (multipart). Antes se convertía a base64,
+    // lo que con fotos de varios MB rebasaba los 10 ms de CPU del plan gratis.
     const mimeType = file.type || 'image/jpeg';
     const isVideo = mimeType.startsWith('video/');
-    const dataUri = `data:${mimeType};base64,${toBase64(await file.arrayBuffer())}`;
+    const envio = new FormData();
+    envio.append('file', file, file.name || (isVideo ? 'video.mp4' : 'photo.jpg'));
+    envio.append('upload_preset', c.env.CLOUDINARY_PRESET);
 
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${c.env.CLOUDINARY_CLOUD}/${isVideo ? 'video' : 'image'}/upload`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: dataUri, upload_preset: c.env.CLOUDINARY_PRESET, resource_type: isVideo ? 'video' : 'image' }),
-      }
+      { method: 'POST', body: envio, signal: AbortSignal.timeout(isVideo ? 170000 : 50000) }
     );
     const data = await response.json();
     console.log('cloudinary:', response.status, data.error || 'ok');

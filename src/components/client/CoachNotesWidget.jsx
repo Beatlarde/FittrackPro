@@ -78,7 +78,5 @@ const CoachNotesWidget = ({ uid, initialNotes }) => {
   );
 };
 
-// --- SECCIÓN DE FOTOS ---
-const PHOTO_CATEGORIES = ['Fotos iniciales', 'Avance 1 mes', 'Avance 2 meses', 'Avance 3 meses'];
 
 export default CoachNotesWidget;

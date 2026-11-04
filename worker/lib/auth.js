@@ -10,6 +10,7 @@ export const authMiddleware = async (c, next) => {
     const decoded = await verifyIdToken(token, c.env.FIREBASE_PROJECT_ID);
     c.set('uid', decoded.uid);
     c.set('authEmail', decoded.email || null);
+    c.set('authProvider', decoded.firebase?.sign_in_provider || null);
   } catch (e) {
     return c.json({ error: 'Token inválido' }, 401);
   }

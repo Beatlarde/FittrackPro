@@ -36,6 +36,7 @@ export class FsTimestamp {
   toDate() { return new Date(this.iso); }
   toMillis() { return new Date(this.iso).getTime(); }
   get _seconds() { return Math.floor(this.toMillis() / 1000); }
+  get seconds() { return this._seconds; }
   toJSON() { const ms = this.toMillis(); return { _seconds: Math.floor(ms / 1000), _nanoseconds: (ms % 1000) * 1e6 }; }
 }
 
@@ -149,6 +150,9 @@ export function firestore(env) {
       const qs = masks.map((m) => 'updateMask.fieldPaths=' + encodeURIComponent(m)).join('&');
       await call(`${base}/${path}?${qs}&currentDocument.exists=true`, { method: 'PATCH', body: JSON.stringify({ fields }) });
     },
+
+    // Id nuevo al estilo Firestore (20 caracteres) para crear documentos con id propio
+    newId() { return crypto.randomUUID().replace(/-/g, '').slice(0, 20); },
 
     async delete(path) {
       await call(`${base}/${path}`, { method: 'DELETE' });
