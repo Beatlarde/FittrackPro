@@ -144,13 +144,10 @@ Genera los 7 días (Lunes a Domingo). Solo el JSON.`;
       setAnalysisStage(4);
       track('onboarding_complete', { modalidad, objetivo: userData.objective, equipo: userData.equipment });
 
-      // Verificar si tiene premium pendiente de Hotmart
+      // Premium pendiente de Hotmart (pagó antes de tener cuenta): lo activa el servidor
       try {
-        const pendiente = await getDoc(doc(db, 'premiumPendiente', user.email));
-        if (pendiente.exists()) {
-          await setDoc(doc(db, 'users', user.uid), { premium: true, premiumStatus: 'authorized', premiumSource: 'hotmart' }, { merge: true });
-          await deleteDoc(doc(db, 'premiumPendiente', user.email));
-        }
+        const token = await getAuthToken();
+        await fetch(`${BACKEND_URL}/reclamar-premium-pendiente`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       } catch {}
 
       // Limpiar refCoach pendiente
@@ -164,7 +161,7 @@ Genera los 7 días (Lunes a Domingo). Solo el JSON.`;
         }).catch(() => {});
       }
       // Enviar mensaje de bienvenida automático
-      fetch(`${BACKEND_URL}/mensaje-bienvenida`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: user.uid }) }).catch(() => {});
+      getAuthToken().then(token => fetch(`${BACKEND_URL}/mensaje-bienvenida`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ uid: user.uid }) })).catch(() => {});
       onComplete();
     } catch (error) {
       console.error("Error guardando onboarding:", error);

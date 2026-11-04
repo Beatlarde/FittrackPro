@@ -3,19 +3,41 @@
 import { Hono } from 'hono';
 import { authMiddleware, premiumMiddleware, adminMiddleware } from '../lib/auth.js';
 import { firestore } from '../lib/firestore.js';
+import { aplicarPremium, cargarUsuario } from '../lib/premium.js';
 
 const r = new Hono();
 
 r.get('/verificar-premium', authMiddleware, premiumMiddleware, (c) =>
   c.json({ isPremium: c.get('isPremium'), role: c.get('user').role }));
 
+// El panel admin ya no escribe premium directo en Firestore: lo hace este endpoint.
 r.post('/admin/actualizar-plan-premium', authMiddleware, adminMiddleware, async (c) => {
   try {
     const { uid, premium } = await c.req.json();
     const db = firestore(c.env);
-    if (await db.get(`plans/${uid}`)) await db.update(`plans/${uid}`, { daysUnlocked: premium ? 7 : 3 });
+    const user = await cargarUsuario(db, uid);
+    if (!user) return c.json({ ok: false, error: 'Usuario no encontrado' }, 404);
+    await aplicarPremium(db, user, premium === true, { premiumStatus: premium ? 'manual' : 'manual_revocado' });
     return c.json({ ok: true });
-  } catch (e) { return c.json({ ok: false }); }
+  } catch (e) { return c.json({ ok: false, error: e.message }, 500); }
+});
+
+// Quien pagó en Hotmart antes de tener cuenta: al terminar el onboarding se le activa aquí
+// (antes lo hacía el navegador escribiendo premium:true directo en Firestore).
+r.post('/reclamar-premium-pendiente', authMiddleware, async (c) => {
+  try {
+    const email = c.get('authEmail');
+    if (!email) return c.json({ premium: false });
+    const db = firestore(c.env);
+    const pend = await db.get(`premiumPendiente/${email}`);
+    if (!pend) return c.json({ premium: false });
+    const user = await cargarUsuario(db, c.get('uid'));
+    if (!user) return c.json({ premium: false });
+    await aplicarPremium(db, user, true, { premiumStatus: 'authorized', premiumSource: pend.data?.source || 'hotmart' });
+    await db.delete(`premiumPendiente/${email}`);
+    console.log(`✅ Premium pendiente reclamado: ${email}`);
+    return c.json({ premium: true });
+  } catch (e) { return c.json({ error: e.message }, 500); }
 });
 
 r.post('/registrar-intento-pago', authMiddleware, async (c) => {
@@ -43,7 +65,7 @@ r.post('/verificar-pago', authMiddleware, async (c) => {
         });
         const sub = await res.json();
         if (res.ok && sub.status === 'authorized') {
-          await db.update(`users/${uid}`, { premium: true, premiumStatus: 'authorized', premiumUpdatedAt: Date.now() });
+          await aplicarPremium(db, { id: uid, data: userData }, true, { premiumStatus: 'authorized' });
           console.log(`🔄 Premium recuperado por verificación activa: ${userData.email}`);
           return c.json({ premium: true, source: 'mp_verification' });
         }
@@ -63,8 +85,7 @@ r.post('/admin/activar-premium', authMiddleware, adminMiddleware, async (c) => {
     const rows = await db.query('users', { where: [['email', '==', email]], limit: 1 });
     if (!rows.length) return c.json({ error: 'Usuario no encontrado' }, 404);
     const id = rows[0].id;
-    await db.update(`users/${id}`, { premium: true, premiumStatus: 'manual', premiumUpdatedAt: Date.now(), premiumMotivo: motivo });
-    if (await db.get(`plans/${id}`)) await db.update(`plans/${id}`, { daysUnlocked: 7 });
+    await aplicarPremium(db, rows[0], true, { premiumStatus: 'manual', premiumMotivo: motivo });
     console.log(`🔑 Premium activado manualmente para ${email} — motivo: ${motivo}`);
     return c.json({ ok: true, email });
   } catch (e) { return c.json({ error: e.message }, 500); }

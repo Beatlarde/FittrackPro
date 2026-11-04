@@ -13,6 +13,9 @@ import admin from './routes/admin.js';
 import plans from './routes/plans.js';
 import premium from './routes/premium.js';
 import demo from './routes/demo.js';
+import comms from './routes/comms.js';
+import webhooks from './routes/webhooks.js';
+import { scheduled } from './crons.js';
 
 const ALLOWED_ORIGINS = [
   'https://fittrackpro.store',
@@ -38,6 +41,8 @@ api.route('/', admin);
 api.route('/', plans);
 api.route('/', premium);
 api.route('/', demo);
+api.route('/', comms);
+api.route('/', webhooks);
 
 api.onError((err, c) => {
   console.error('API error:', err);
@@ -49,4 +54,5 @@ app.route('/api', api);
 app.all('/api/*', (c) => c.json({ error: 'Ruta no encontrada' }, 404));
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+// fetch → peticiones HTTP; scheduled → Cron Trigger (cada 15 min, ver crons.js)
+export default { fetch: app.fetch, scheduled };

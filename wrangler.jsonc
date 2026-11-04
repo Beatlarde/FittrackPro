@@ -9,7 +9,10 @@
   "name": "fittrackpro-web",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // Un solo Cron Trigger cada 15 min; worker/crons.js decide qué tarea toca según la hora de CDMX
+  "triggers": { "crons": ["*/15 * * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true;
+    }
+
+    function isCoach() {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
+    }
+
+    function isClientOfCoach(userId) {
+      return isCoach() &&
+        get(/databases/$(database)/documents/users/$(userId)).data.refCoachId == request.auth.uid;
+    }
+
+    // Campos que SOLO cambia el servidor (Worker) o el admin: pagos y permisos.
+    // Antes cualquier usuario podía escribirse premium:true, admin:true o role:'coach'.
+    function camposProtegidos() {
+      return ['premium', 'premiumStatus', 'premiumSource', 'premiumUpdatedAt', 'premiumMotivo',
+              'admin', 'role', 'mpSubscriptionId', 'mpPayerId', 'hotmartTransactionId'];
+    }
+
+    function noTocaProtegidos() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposProtegidos());
+    }
+
+    // ── Usuarios ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isClientOfCoach(userId) || isAdmin();
+      // Al registrarse solo puede nacer como cliente y sin premium/admin.
+      allow create: if isOwner(userId)
+        && !request.resource.data.keys().hasAny(camposProtegidos().removeAll(['role']))
+        && request.resource.data.get('role', 'client') == 'client';
+      allow update: if isAdmin()
+        || ((isOwner(userId) || isClientOfCoach(userId)) && noTocaProtegidos());
+      allow delete: if isAdmin();
+    }
+
+    // ── Planes ────────────────────────────────────────────────────────────────
+    // daysUnlocked (3 gratis / 7 premium) lo pone el servidor, el coach o el admin.
+    match /plans/{userId} {
+      allow read: if isOwner(userId) || isClientOfCoach(userId) || isAdmin();
+      allow create: if isAdmin() || isClientOfCoach(userId)
+        || (isOwner(userId) && request.resource.data.get('daysUnlocked', 3) <= 3);
+      allow update: if isAdmin() || isClientOfCoach(userId)
+        || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['daysUnlocked']));
+      allow delete: if isOwner(userId) || isAdmin() || isClientOfCoach(userId);
+    }
+
+    // ── Historial de planes ───────────────────────────────────────────────────
+    match /planHistorial/{docId} {
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isClientOfCoach(resource.data.userId) ||
+        isAdmin()
+      );
+      allow create: if isAuth() && (
+        request.resource.data.userId == request.auth.uid ||
+        isClientOfCoach(request.resource.data.userId) ||
+        isAdmin()
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Logs ──────────────────────────────────────────────────────────────────
+    match /logs/{logId} {
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isClientOfCoach(resource.data.userId) ||
+        isAdmin()
+      );
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Fotos ─────────────────────────────────────────────────────────────────
+    match /photos/{photoId} {
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isClientOfCoach(resource.data.userId) ||
+        isAdmin()
+      );
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Mensajes ──────────────────────────────────────────────────────────────
+    match /messages/{msgId} {
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow write: if isAdmin();
+    }
+
+    // ── Chats ─────────────────────────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read, write: if isAuth() && (
+        chatId == request.auth.uid ||
+        isClientOfCoach(chatId) ||
+        isAdmin()
+      );
+    }
+
+    // ── Premium Pendiente (Hotmart) ───────────────────────────────────────────
+    match /premiumPendiente/{email} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Coach Requests ────────────────────────────────────────────────────────
+    match /coachRequests/{reqId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── Actividad ────────────────────────────────────────────────────────────
+    match /activity/{docId} {
+      allow read, write: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // ── Bloquear todo lo demás ────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

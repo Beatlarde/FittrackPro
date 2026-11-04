@@ -30,18 +30,20 @@ const AdminPanel = ({ user }) => {
     return () => unsub();
   }, []);
 
+  // Premium lo cambia el servidor (también ajusta los días del plan); el navegador ya no escribe premium.
   const togglePremium = async (uid, actual) => {
-    await updateDoc(doc(db, 'users', uid), { premium: !actual });
-    // Actualizar daysUnlocked en el plan
     try {
       const token = await getAuthToken();
-      await fetch(`${BACKEND_URL}/admin/actualizar-plan-premium`, {
+      const res = await fetch(`${BACKEND_URL}/admin/actualizar-plan-premium`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ uid, premium: !actual })
       });
-    } catch {}
-    showToast(!actual ? '⭐ Usuario ahora es Premium' : '🔄 Usuario vuelto a Free');
+      if (!res.ok) throw new Error();
+      showToast(!actual ? '⭐ Usuario ahora es Premium' : '🔄 Usuario vuelto a Free');
+    } catch {
+      showToast('No se pudo cambiar premium. Intenta de nuevo.', 'error');
+    }
   };
 
   const enviarMensaje = async (u) => {

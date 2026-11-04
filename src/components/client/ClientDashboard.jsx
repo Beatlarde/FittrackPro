@@ -498,7 +498,7 @@ const ClientDashboard = ({ user }) => {
               onListaSuper={(action) => { if (action === 'upgrade') setShowPlanes(true); else { setShowListaSuper(true); track('lista_super_opened', { premium: isPremium(user) }); } }}
               userPremium={isPremium(user)}
               uid={user.uid}
-              daysUnlocked={daysUnlocked}
+              daysUnlocked={isPremium(user) ? 7 : daysUnlocked}
               startDayIndex={startDayIndex}
               todayIndex={todayIndex}
             />
@@ -634,7 +634,7 @@ const ClientDashboard = ({ user }) => {
               onToggleEjercicio={toggleEjercicio}
               userPremium={isPremium(user)}
               uid={user.uid}
-              daysUnlocked={daysUnlocked}
+              daysUnlocked={isPremium(user) ? 7 : daysUnlocked}
               startDayIndex={startDayIndex}
               todayIndex={todayIndex}
               userEquipment={user.goals?.equipment || 'Gym Completo'}

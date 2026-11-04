@@ -15,8 +15,72 @@ Pruebas que no se pudieron hacer en su momento. Al hacerlas, mover el resultado 
 - [ ] **Coach ve las fotos de su cliente** (agregada 2026-11-04). No se pudo probar: la cuenta de prueba es premium sin coach asignado, y no existe un rol de coach general que vea a todos los clientes. Para probar: cuenta coach → registrar un cliente con su link de referido → subir foto desde el cliente → revisar en el panel del coach (1) la galería del cliente y (2) la tarjeta de métricas "últimas fotos". Depende de las reglas de seguridad de Firestore para `photos`.
 - [ ] **Panel admin → Coaches** (Fase 1b): carga lista de coaches y solicitudes.
 - [ ] **Demo de coach** desde el login (en incógnito): abre panel con 5 clientes de ejemplo.
+- [ ] **Correo llega a la bandeja:** el envío salió sin errores; confirmar que el plan llegó a pruebacoach01@gmail.com y si cayó en Spam.
+- [ ] **Hotmart cancelación de suscripción:** tras el deploy, reenviar "Cancelación de suscripción" desde el panel de Hotmart → el log debe mostrar el correo (no `null`) y quitar premium si la cuenta existe.
+- [ ] **Después de publicar las reglas nuevas** (con cuenta normal de cliente): abrir la app, marcar una comida, cambiar modo oscuro, calificar el día → todo guarda sin errores. Con cuenta coach: enviar plan a un cliente. Con admin: activar/quitar premium a un usuario.
+- [ ] **Revisar que nadie se haya dado permisos:** en el panel admin, ver qué usuarios tienen `admin` o `role: coach` y confirmar que cada uno sea legítimo.
+- [ ] **Limpiar cuenta de prueba:** proyecto.fittrackpro@gmail.com quedó premium por la prueba de "Compra aprobada" de Hotmart; quitárselo desde el panel admin si no debe serlo. Borrar en Firestore `premiumPendiente/testeComprador271101postman15@example.com` si existe.
+- [ ] **Webhook Mercado Pago:** cambiar la URL en el panel de MP a `/api/webhook` y hacer un pago/suscripción de prueba → el usuario queda premium y recibe el correo.
+- [ ] **Hotmart con compra real:** comprar con un correo que ya tenga cuenta en FitTrack → queda premium y llega el correo. (El panel de Hotmart ya responde 200.)
+- [ ] **Crons:** revisar en Cloudflare → Workers → fittrackpro-web → Logs, después de las 21:00 CDMX, que aparezca "⏰ Cron 21h CDMX" y lleguen los recordatorios.
+- [ ] **Mensaje de bienvenida:** crear una cuenta nueva y terminar el onboarding → aparece el mensaje del Coach FitTrack y llega el correo.
+
+## 🐞 Bugs conocidos sin arreglar
+
+- **El progreso del día se reinicia a las 6 pm (CDMX)** (detectado 2026-11-04). El frontend guarda `dailyProgress` y `dayReviews` con la fecha ISO en UTC (`toISOString().split('T')[0]`), y en CDMX el día UTC cambia a las 18:00. El cron del servidor ya usa la misma convención para no desfasarse; cuando se arregle en el frontend hay que cambiar también `marcarPreguntaDelDia` y `lastReminderDate` en `worker/crons.js`.
+- **Clave con letras cirílicas `entrenarонHoy`** en `/coach/dashboard-metricas` y en el frontend que la lee. Funciona porque ambos lados usan la misma clave rara; arreglar los dos a la vez.
 
 ## 2026-11-04
+
+### ⚠️ Premium centralizado (H1) + reglas de Firestore endurecidas (H2)
+- **H1 — quien pagaba por webhook se quedaba con 3 días:** nuevo `worker/lib/premium.js` (`aplicarPremium`), único lugar que activa/quita premium. Siempre ajusta `plans.daysUnlocked` (7 premium / 3 gratis; a clientes de coach no les baja los días). Lo usan los webhooks de Hotmart y MP, `/verificar-pago`, `/admin/activar-premium` y `/admin/actualizar-plan-premium`.
+  - De paso: el correo "¡Ya eres Premium!" ya no se repite en cada cobro mensual; solo sale cuando el usuario pasa de gratis a premium.
+  - `ClientDashboard.jsx`: un usuario premium ve 7 días aunque su plan guardado diga 3 (arregla a los que ya pagaron y quedaron atorados).
+- **H2 — cualquier usuario podía darse premium, admin o coach:** las reglas de Firestore dejaban al dueño editar todo su documento `users`, incluidos `premium`, `admin` y `role`, y poner `daysUnlocked: 7` en su plan.
+  - `firestore.rules` (nuevo en el repo; antes solo vivían en la consola): `premium*`, `admin`, `role`, `mpSubscriptionId`, `mpPayerId` y `hotmartTransactionId` solo los cambia el servidor o el admin. Al registrarse solo se puede nacer como `client`. `daysUnlocked` solo lo cambian servidor, coach o admin. Lo demás quedó igual.
+  - `AdminPanel.jsx`: premium se cambia por el Worker (antes escribía directo en Firestore).
+  - `OnboardingFlow.jsx`: el premium pendiente de Hotmart lo reclama el Worker (`/reclamar-premium-pendiente`). **Hallazgo:** el código anterior leía `premiumPendiente` desde el navegador, pero las reglas solo dejaban leerlo al admin → quien pagaba en Hotmart antes de registrarse **nunca** recibió premium.
+  - Respaldos: `*.backup.premium.jsx` de los 3 archivos.
+- **Prueba local (Worker):** 12 casos ✅ — compra Hotmart (7 días, 1 correo), renovación (sin correo), reembolso (3 días), cliente de coach cancela (se queda en 7), reclamar pendiente, MP alta/cobro mensual/cancelación, admin activa/quita, no-admin rechazado (403). Frontend compila ✅.
+- **Reglas publicadas en la consola** 2026-11-04 17:45. No se pudieron probar en emulador (red bloqueada). Se revisaron contra todas las escrituras de la app a `users` y `plans`. Si algo falla al publicarlas: consola → Reglas → versión anterior (9 jun 2026) → restaurar.
+
+### 🔄 Documento de lógica comercial
+- **Nuevo:** `docs/LOGICA_COMERCIAL.md` — tipos de usuario, gratis vs premium (promesa contra lo que aplica el código), cobro por MP y Hotmart, retención, medición, hallazgos y preguntas abiertas. Se irá completando.
+- **Hallazgos registrados ahí (sin arreglar aún):** H1 webhooks no desbloquean los 7 días · H2 el navegador puede escribir `premium` en Firestore · H3 promesas de premium sin candado · H4 modalidad coach sin cobro · H5 precio fijo en 4 lugares.
+
+### ✅ Gmail funcionando + cancelación de suscripción en Hotmart no quitaba premium
+- **Gmail (prueba real):** `enviar-plan-email` a pruebacoach01@gmail.com y correo de premium de Hotmart a proyecto.fittrackpro@gmail.com, sin errores SMTP en `wrangler tail` ✅. Remitente: proyecto.fittrackpro@gmail.com.
+- **Bug (venía del backend original):** en `SUBSCRIPTION_CANCELLATION` Hotmart manda el correo en `data.subscriber.email`, no en `data.buyer.email` → el log mostraba `null` y la cancelación nunca quitaba premium.
+- **Cambio:** `worker/routes/webhooks.js` toma el correo de `buyer`, `subscriber` o `subscription.subscriber`.
+- **Prueba local:** cancelación con `subscriber` → premium false ✅. Reenviar "Cancelación de suscripción" desde Hotmart tras el deploy: el log debe mostrar el correo, no `null`.
+- **Nota:** `PURCHASE_CANCELED` (compra no pagada) no quita premium a propósito: esa compra nunca lo activó.
+
+### ✅ Hotmart: contracargo y disputa ahora quitan premium
+- **Decisión de Jesús:** si hay contracargo (`PURCHASE_CHARGEBACK`) o disputa (`PURCHASE_PROTEST`), se retira premium. Antes solo lo quitaban cancelación y reembolso.
+- **Cambio:** `worker/routes/webhooks.js`, lista `QUITAN_PREMIUM` con los 4 eventos. Si el comprador aún no tiene cuenta, se borra su `premiumPendiente` para que no quede premium al registrarse.
+- **Prueba local:** contracargo y disputa → premium false ✅ · disputa sin cuenta → pendiente borrado ✅ · evento ajeno (primer acceso) no cambia nada ✅.
+
+### ✅ Webhook Hotmart respondía 401 a los eventos de prueba
+- **Síntoma:** en Hotmart → Webhook, los envíos de prueba ("Primer acceso", "Módulo completo") salían con 401.
+- **Cambio:** `worker/routes/webhooks.js` ahora acepta el hottok en el header `X-HOTMART-HOTTOK`, en el cuerpo (`hottok`, JSON o formulario del postback 1.0) o en la URL, y le quita espacios/saltos de línea al comparar. Si falla, el log dice de dónde llegó y la longitud (sin mostrar el valor).
+- **Prueba local:** header, cuerpo JSON, formulario y URL → 200; hottok incorrecto → 401 ✅.
+- **Causa real:** el secreto `HOTMART_HOTTOK` quedó guardado con 45 caracteres y el hottok de Hotmart tiene 38 (se coló texto extra al pegarlo). El log de diagnóstico lo mostró (`esperado len45 | cuerpo=len38`). Se volvió a guardar con `printf '%s' '<hottok>' | npx wrangler secret put HOTMART_HOTTOK` desde `~/FittrackPro`.
+- **Prueba real:** curl al Worker publicado con el hottok en el cuerpo → 200 ✅.
+- **Lección:** cargar secretos con `printf '%s' ... |` y siempre desde la carpeta del proyecto; si un webhook da 401, `npx wrangler tail` muestra las longitudes.
+
+### ⚠️ Fase 2: correos, pagos y tareas programadas en el Worker
+- **Correo:** `worker/lib/email.js` usa `worker-mailer` (SMTP de Gmail, puerto 465 con TLS; Cloudflare bloquea el 25). Requiere los secretos `GMAIL_USER` y `GMAIL_PASS` (contraseña de aplicación de Google). Sin ellos responde error claro en vez de fallar en silencio.
+- **Rutas nuevas** (`worker/routes/comms.js`): `/send-email` y `/mensaje-bienvenida`.
+  - **Arreglo de seguridad:** en el backend original `/send-email` dejaba a cualquiera mandar correos a cualquier dirección usando la cuenta de FitTrack. Ahora: un usuario solo a su propio correo, un coach solo a sus clientes, el admin a cualquiera.
+  - `/mensaje-bienvenida` exige token y que el uid sea el del usuario. `OnboardingFlow.jsx` ahora manda el token (antes no lo mandaba).
+- **Webhooks** (`worker/routes/webhooks.js`): `/webhook` (Mercado Pago) y `/webhook-hotmart`.
+  - **Arreglo de seguridad:** el webhook de Hotmart original no verificaba nada; cualquiera podía activarse premium con un POST. Ahora exige el header `X-HOTMART-HOTTOK` igual al secreto `HOTMART_HOTTOK`.
+  - Mercado Pago: se consulta el pago/suscripción en la API de MP con `MP_ACCESS_TOKEN` antes de activar premium (no se confía en lo que dice el aviso).
+- **Crons** (`worker/crons.js`, cada 15 min, `wrangler.jsonc`): recordatorio de comidas y pregunta del día (21h), mensajes del coach por ausencia (20–23h), inactividad (10–13h) y primera semana (11–14h), limpieza de demos.
+  - Cloudflare gratis permite ~50 peticiones por ejecución: cada corrida tiene presupuesto de 42; si hay más usuarios de los que caben, sigue en la siguiente corrida (las marcas evitan repetir).
+  - **Arreglo:** el recordatorio de comidas original buscaba en la colección `activity` (que la app ya no usa) y con fecha UTC → mandaba recordatorio aunque sí hubieras registrado comida. Ahora revisa `logs` con la fecha de CDMX.
+- **Prueba local (servicios simulados):** permisos de `/send-email` (5 casos) ✅ · Hotmart sin hottok 401 / con hottok activa premium ✅ · MP consulta `/preapproval` y activa ✅ · cron 21:05 con 23 usuarios: 34 peticiones (límite 50), recordatorio solo a quien no registró comida, ausencia en tandas sin repetir ✅.
+- **Pendiente:** cargar secretos, cambiar URLs de webhooks y probar en real (ver Pruebas pendientes).
 
 ### 🔄 Las fotos subidas no aparecían en la tarjeta de métricas del coach
 - **Causa:** `/coach/cliente-metricas` pedía las fotos con `orderBy('timestamp')`, pero `/upload-photo` las guarda con `createdAt`. Firestore descarta los documentos sin el campo de orden → la tarjeta "últimas fotos" nunca mostraba fotos subidas. **Venía del backend original.**
