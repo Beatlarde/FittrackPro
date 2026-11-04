@@ -1,13 +1,22 @@
 /**
- * FitTrack Pro — frontend (React + Vite) servido como assets estáticos en Cloudflare Workers.
+ * FitTrack Pro — un solo Worker:
+ *   /api/*  → backend (worker/index.js)
+ *   resto   → frontend React compilado en ./dist
  * Build: npm run build  →  Deploy: npx wrangler deploy
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "fittrackpro-web",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-23",
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "FRONTEND_URL": "https://fittrackpro.store"
   }
 }

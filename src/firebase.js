@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,5 +16,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Long polling forzado: algunas redes corporativas/VPN cortan el canal en vivo
+// (WebChannel) de Firestore y la app se queda en el spinner de carga.
+// Con peticiones normales funciona en cualquier red. Ver docs/BITACORA.md (2026-11-04).
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+
 export const analytics = getAnalytics(app);

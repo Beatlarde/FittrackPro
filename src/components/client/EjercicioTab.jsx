@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dumbbell, Loader2, Check } from 'lucide-react';
+import { Dumbbell, Loader2, Check, Play } from 'lucide-react';
 import { BACKEND_URL } from '../../config/constants';
 import { getAuthToken } from '../../services/api';
 
@@ -15,6 +15,8 @@ const EjercicioTab = ({ planRaw, checkedEjercicios, onToggleEjercicio, userPremi
   const [editandoEj, setEditandoEj] = useState(null);
   const [showEsfuerzo, setShowEsfuerzo] = useState(null);
   const [esfuerzoData, setEsfuerzoData] = useState({});
+  // Demostración por ejercicio: { [key]: { show, loading, gif, videoId, musculo, error } }
+  const [demo, setDemo] = useState({});
 
   const plan = (() => { try { return typeof planRaw === 'string' ? JSON.parse(planRaw) : planRaw; } catch { return null; } })();
   if (!plan) return (
@@ -53,6 +55,38 @@ Responde SOLO con JSON: {"nombre":"...","series":${ej.series},"reps":"${ej.reps}
       const alt = JSON.parse(clean);
       setAltEjercicio(prev => ({ ...prev, [key]: { loading: false, alternativa: alt } }));
     } catch { setAltEjercicio(prev => ({ ...prev, [key]: { loading: false, error: true } })); }
+  };
+
+  // Demostración: primero el GIF de ExerciseDB; solo si no existe, un video corto de YouTube.
+  // Se carga al tocar el botón y el backend guarda cada búsqueda en caché.
+  const verComoSeHace = async (ej, key) => {
+    const actual = demo[key];
+    if (actual && !actual.loading) {
+      setDemo(prev => ({ ...prev, [key]: { ...actual, show: !actual.show } }));
+      return;
+    }
+    setDemo(prev => ({ ...prev, [key]: { show: true, loading: true } }));
+    // Tiempo límite: si una API no contesta, se sigue con lo que haya en vez de quedarse cargando
+    const conLimite = (url, opts = {}) =>
+      fetch(url, { ...opts, signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({}));
+    try {
+      const exRes = await conLimite(`${BACKEND_URL}/ejercicio?q=${encodeURIComponent(ej.nombre)}`);
+      if (exRes.gif) {
+        setDemo(prev => ({ ...prev, [key]: { show: true, loading: false, gif: exRes.gif, musculo: exRes.musculo || null } }));
+        return;
+      }
+      // Sin GIF → video corto
+      setDemo(prev => ({ ...prev, [key]: { show: true, loading: true, sinGif: true } }));
+      const token = await getAuthToken();
+      const nombreEs = ej.nombre.replace(/\([^)]*\)/g, '').trim();
+      const ytRes = await conLimite(
+        `${BACKEND_URL}/youtube?q=${encodeURIComponent(nombreEs)}&equipo=${encodeURIComponent(userEquipment || '')}`,
+        { headers: token ? { 'Authorization': `Bearer ${token}` } : {} }
+      );
+      setDemo(prev => ({ ...prev, [key]: { show: true, loading: false, sinGif: true, videoId: ytRes.videoId || null } }));
+    } catch {
+      setDemo(prev => ({ ...prev, [key]: { show: true, loading: false, error: true } }));
+    }
   };
 
   return (
@@ -103,6 +137,7 @@ Responde SOLO con JSON: {"nombre":"...","series":${ej.series},"reps":"${ej.reps}
               const key = `${selectedDay}-ej-${i}`;
               const done = checkedEjercicios?.includes(key);
               const alt = altEjercicio[key];
+              const d = demo[key];
               return (
                 <div key={i} className={`rounded-2xl overflow-hidden transition-all ${done ? 'opacity-60' : ''}`}>
                   <div onClick={() => { onToggleEjercicio(key); if (!done) setTimeout(() => setShowEsfuerzo(key), 300); else setShowEsfuerzo(null); }}
@@ -114,8 +149,51 @@ Responde SOLO con JSON: {"nombre":"...","series":${ej.series},"reps":"${ej.reps}
                       <p className={`text-sm font-black leading-snug ${done ? 'text-slate-500 line-through' : 'text-white'}`}>{ej.nombre}</p>
                       {ej.nota && <p className="text-xs text-slate-500 mt-0.5">{ej.nota}</p>}
                     </div>
-                    <span className={`font-black text-sm shrink-0 ${done ? 'text-slate-600' : 'text-emerald-400'}`}>{ej.series}×{ej.reps}</span>
+                    <div className="flex flex-col items-end gap-2 shrink-0 max-w-[6.5rem]">
+                      <span className={`font-black text-sm text-right leading-tight ${done ? 'text-slate-600' : 'text-emerald-400'}`}>{ej.series}×{ej.reps}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); verComoSeHace(ej, key); }}
+                        aria-label={d?.show ? `Ocultar demostración de ${ej.nombre}` : `Ver cómo se hace ${ej.nombre}`}
+                        aria-expanded={!!d?.show}
+                        className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all active:scale-95 ${
+                          d?.show ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                        }`}>
+                        {d?.loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Play className="w-4 h-4 ml-0.5" fill="currentColor"/>}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Panel de demostración: GIF, o video corto si no hay GIF */}
+                  {d?.show && (
+                    <div className="mx-3 mb-3 bg-slate-900/60 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                      {d.sinGif && (
+                        <p className="text-xs text-amber-300 font-bold">No encontramos GIF de este ejercicio. Aquí tienes un video corto:</p>
+                      )}
+                      {d.loading ? (
+                        <div className="flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin text-emerald-400"/><span className="text-xs text-slate-400">{d.sinGif ? 'Buscando video...' : 'Buscando demostración...'}</span></div>
+                      ) : d.gif ? (
+                        <>
+                          <div className="bg-white rounded-xl overflow-hidden flex justify-center">
+                            <img src={d.gif} alt={`Demostración de ${ej.nombre}`} loading="lazy" className="max-h-56 object-contain"/>
+                          </div>
+                          {d.musculo && <p className="text-[11px] text-slate-500 font-bold uppercase">Músculo: {d.musculo}</p>}
+                        </>
+                      ) : d.videoId ? (
+                        <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                          <iframe
+                            src={`https://www.youtube-nocookie.com/embed/${d.videoId}`}
+                            title={`Video: ${ej.nombre}`}
+                            className="w-full h-full"
+                            allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">Tampoco encontramos un video para este ejercicio. Pregúntale a tu coach o usa la alternativa.</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Widget RPE/RIR */}
                   {done && showEsfuerzo === key && (
@@ -164,20 +242,26 @@ Responde SOLO con JSON: {"nombre":"...","series":${ej.series},"reps":"${ej.reps}
                   )}
 
                   {/* Alternativa por equipo */}
-                  {!alt ? (
+                  {!alt && (
                     <button onClick={() => generarAlternativaEjercicio(ej, key)}
                       className="w-full text-xs font-black text-slate-500 hover:text-amber-400 px-4 py-2 text-left flex items-center gap-2 transition-colors">
                       ❓ Mi gym no tiene este equipo
                     </button>
-                  ) : alt.loading ? (
+                  )}
+                  {alt?.loading ? (
                     <div className="px-4 pb-2 flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin text-amber-400"/><span className="text-xs text-slate-400">Buscando alternativa...</span></div>
-                  ) : alt.alternativa ? (
+                  ) : alt?.alternativa ? (
                     <div className="mx-3 mb-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                       <p className="text-xs font-black text-amber-400 uppercase mb-1">✅ Alternativa</p>
                       <p className="text-sm font-black text-white">{alt.alternativa.nombre}</p>
                       <p className="text-xs text-slate-400 mt-0.5">{alt.alternativa.series}×{alt.alternativa.reps} — {alt.alternativa.nota}</p>
                       <button onClick={() => setAltEjercicio(prev => ({ ...prev, [key]: null }))}
                         className="text-xs text-slate-500 mt-1">Descartar ✕</button>
+                    </div>
+                  ) : alt?.error ? (
+                    <div className="px-4 pb-2 flex items-center gap-3">
+                      <span className="text-xs text-red-400">No se pudo generar la alternativa.</span>
+                      <button onClick={() => setAltEjercicio(prev => ({ ...prev, [key]: null }))} className="text-xs text-slate-500">Reintentar</button>
                     </div>
                   ) : null}
                 </div>
