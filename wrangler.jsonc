@@ -19,6 +19,12 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
+  // Dominio propio (zona en Cloudflare desde 2026-11-04). Wrangler crea los registros DNS y el certificado.
+  // www → raíz se hace con una Redirect Rule en el panel de Cloudflare (corre antes del Worker).
+  "routes": [
+    { "pattern": "fittrackpro.store", "custom_domain": true },
+    { "pattern": "www.fittrackpro.store", "custom_domain": true }
+  ],
   "vars": {
     "FRONTEND_URL": "https://fittrackpro.store"
   }

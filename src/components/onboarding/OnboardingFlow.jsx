@@ -87,7 +87,7 @@ Cliente:
 - Salud: Lesiones(${userData.injuries || 'Ninguna'}), Estrés(${userData.stressLevel})
 ${restricciones}
 Estructura exacta por día — "calentamiento" y "ejercicios" son arrays SEPARADOS:
-{"dia":"Lunes","entrenamiento":{"calentamiento":[{"nombre":"Rotación de cadera","duracion":"30 seg"},{"nombre":"Sentadilla sin peso","duracion":"10 reps"}],"ejercicios":[{"nombre":"Sentadilla con Barra","series":4,"reps":"8-10","nota":"Espalda recta"}]},"dieta":{"kcal":2000,"proteina":150,"carbs":200,"grasas":60,"comidas":[{"momento":"Desayuno","descripcion":"3 huevos con avena"}]}}
+{"dia":"Lunes","entrenamiento":{"calentamiento":[{"nombre":"Rotación de cadera","duracion":"30 seg"},{"nombre":"Sentadilla sin peso","duracion":"10 reps"}],"ejercicios":[{"nombre":"Sentadilla con Barra","series":4,"reps":"8-10","nota":"Espalda recta"}]},"dieta":{"kcal":2000,"proteina":150,"carbs":200,"grasas":60,"comidas":[{"momento":"Desayuno","descripcion":"Huevos a la mexicana (3 huevos) con 2 tortillas de maíz y 1/2 taza de frijoles de la olla","kcal":520,"proteina":30,"carbs":55,"grasas":19}]}}
 CRÍTICO: calentamiento = activación/movilidad (4-6 movimientos). ejercicios = SOLO fuerza/hipertrofia con series y reps. NUNCA mezcles ambos.
 Genera los 7 días (Lunes a Domingo). Solo el JSON.`;
 

@@ -291,12 +291,18 @@ const ClientDashboard = ({ user }) => {
   };
 
   // Guardar alternativa elegida: calcular macros con IA y guardar en Firestore
-  const handleSelectAlternativa = async (descripcion, momento) => {
-    showToast('⏳ Calculando macros...', 'info');
+  const handleSelectAlternativa = async (descripcion, momento, macrosOpcion = null) => {
     try {
-      const aiResponse = await callGemini(descripcion, SYSTEM_PROMPTS.NUTRITION_ESTIMATOR);
-      const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-      const macros = JSON.parse(clean);
+      let macros;
+      if (macrosOpcion && macrosOpcion.proteina != null) {
+        // La alternativa ya trae sus macros: se registran tal cual (sin otra llamada a la IA).
+        macros = { kcal: macrosOpcion.kcal, protein: macrosOpcion.proteina, carbs: macrosOpcion.carbs, fats: macrosOpcion.grasas };
+      } else {
+        showToast('⏳ Calculando macros...', 'info');
+        const aiResponse = await callGemini(descripcion, SYSTEM_PROMPTS.NUTRITION_ESTIMATOR);
+        const clean = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+        macros = JSON.parse(clean);
+      }
       const contenido = `${descripcion}\n(IA: ${macros.kcal} kcal | P:${macros.protein}g C:${macros.carbs}g G:${macros.fats}g)`;
       await addDoc(collection(db, 'logs'), {
         userId: user.uid, userName: user.name, type: 'meal',

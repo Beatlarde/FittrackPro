@@ -168,7 +168,7 @@ ${coachInstrucciones ? `\nINSTRUCCIONES ESPECIALES DEL COACH (prioridad alta):\n
     const c = selectedClient;
     const prompt = `Crea SOLO el plan de nutrición semanal para este cliente. 
 IMPORTANTE: Responde ÚNICAMENTE con un array JSON de 7 objetos, SIN markdown, SIN texto, SIN wrapper, empezando directo con "[".
-Estructura exacta por día: {"dia":"Lunes","entrenamiento":{"calentamiento":[],"ejercicios":[]},"dieta":{"kcal":2000,"proteina":150,"carbs":200,"grasas":60,"comidas":[{"momento":"Desayuno","descripcion":"descripcion"}]}}
+Estructura exacta por día: {"dia":"Lunes","entrenamiento":{"calentamiento":[],"ejercicios":[]},"dieta":{"kcal":2000,"proteina":150,"carbs":200,"grasas":60,"comidas":[{"momento":"Desayuno","descripcion":"descripcion con cantidades","kcal":500,"proteina":35,"carbs":50,"grasas":15}]}}
 ⚠️ CRÍTICO: El campo "entrenamiento" SIEMPRE debe ser {"calentamiento":[],"ejercicios":[]} — NO generes ejercicios, SOLO nutrición.
 - Nombre: ${c.name}, Objetivo: ${c.goals?.objective}
 - Kcal objetivo: ${c.goals?.targetKcal} kcal/día

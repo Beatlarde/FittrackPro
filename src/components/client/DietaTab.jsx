@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { BACKEND_URL } from '../../config/constants';
 import { track } from '../../utils/analytics';
-import { estimarMacrosComida } from '../../utils/metrics';
+import { macrosDeComida } from '../../utils/metrics';
 import { callGemini, getAuthToken } from '../../services/api';
 import { useToast } from '../../hooks/useToast';
 import MacroCircle from '../shared/MacroCircle';
@@ -98,9 +98,15 @@ const DietaTab = ({ planRaw, checkedComidas, onToggleComida, onSelectAlternativa
   const generarAlternativaComida = async (comida, key) => {
     setAltComidas(prev => ({ ...prev, [key]: { ...(prev[key] || {}), loading: true, show: true } }));
     const token = await getAuthToken();
-    const prompt = `Genera DOS alternativas equivalentes para esta comida: "${comida.descripcion}".
-Mantén calorías y macros similares. Disponibles en México.
-Responde SOLO con JSON sin markdown: [{"descripcion": "opción 1 con ingredientes y cantidades"}, {"descripcion": "opción 2 con ingredientes y cantidades"}]`;
+    const meta = macrosDeComida(comida, dieta);
+    const otras = (dieta?.comidas || []).filter(x => x !== comida).map(x => `${x.momento}: ${x.descripcion}`).join(' | ');
+    const prompt = `El usuario pide una alternativa para su ${String(comida.momento || 'comida').toUpperCase()}.
+Platillo actual de ${comida.momento}: "${comida.descripcion}".
+${meta ? `Meta de esta comida: ~${meta.kcal} kcal, ${meta.proteina} g proteína, ${meta.carbs} g carbohidratos, ${meta.grasas} g grasas (margen ±10%).` : 'Mantén calorías y macros similares.'}
+Genera DOS alternativas que sean platillos propios de ${comida.momento} (si es desayuno, platillos de desayuno; si es colación o media mañana, algo ligero y práctico; si es comida, plato fuerte; si es cena, algo ligero). Nunca propongas un platillo de otro momento del día.
+Que sean platillos caseros mexicanos con ingredientes de mercado o súper en México, nada importado, e incluye cantidades (gramos, tazas, número de tortillas).
+No repitas lo que ya come ese día: ${otras || 'sin otras comidas'}.
+Responde SOLO con JSON sin markdown: [{"descripcion":"opción 1 con ingredientes y cantidades","kcal":0,"proteina":0,"carbs":0,"grasas":0},{"descripcion":"opción 2 con ingredientes y cantidades","kcal":0,"proteina":0,"carbs":0,"grasas":0}] (kcal y macros de cada opción, calculados con sus cantidades).`;
     try {
       const res = await fetch(`${BACKEND_URL}/agente-nutricion`, {
         method: 'POST',
@@ -114,22 +120,29 @@ Responde SOLO con JSON sin markdown: [{"descripcion": "opción 1 con ingrediente
     } catch { setAltComidas(prev => ({ ...prev, [key]: { ...(prev[key] || {}), loading: false } })); }
   };
 
-  const elegirAlternativa = async (descripcion, momento, dayIndex, comidaIndex) => {
+  const elegirAlternativa = async (descripcion, momento, dayIndex, comidaIndex, macrosOpcion = null) => {
+    // Si la IA dio macros de la opción, se guardan en la comida para que los círculos sean reales.
+    const conMacros = (c) => {
+      c.descripcion = descripcion;
+      if (macrosOpcion && macrosOpcion.proteina != null) {
+        c.kcal = macrosOpcion.kcal; c.proteina = macrosOpcion.proteina; c.carbs = macrosOpcion.carbs; c.grasas = macrosOpcion.grasas;
+      } else { delete c.kcal; delete c.proteina; delete c.carbs; delete c.grasas; }
+    };
     if (!uid) return;
     // Actualizar visualmente de inmediato
     setPlanLocal(prev => {
       const next = JSON.parse(JSON.stringify(prev));
-      next[dayIndex].dieta.comidas[comidaIndex].descripcion = descripcion;
+      conMacros(next[dayIndex].dieta.comidas[comidaIndex]);
       return next;
     });
     try {
       const planSnap = await getDoc(doc(db, 'plans', uid));
       if (planSnap.exists()) {
         const planArray = JSON.parse(JSON.stringify(planSnap.data().plan));
-        planArray[dayIndex].dieta.comidas[comidaIndex].descripcion = descripcion;
+        conMacros(planArray[dayIndex].dieta.comidas[comidaIndex]);
         await updateDoc(doc(db, 'plans', uid), { plan: planArray });
       }
-      onSelectAlternativa(descripcion, momento); track('alternativa_elegida', { momento });
+      onSelectAlternativa(descripcion, momento, macrosOpcion); track('alternativa_elegida', { momento });
     } catch(e) { console.error(e); }
   };
 
@@ -239,7 +252,7 @@ Responde SOLO con JSON sin markdown: [{"descripcion": "opción 1 con ingrediente
                       <p className={`text-xs font-medium leading-relaxed mt-1 ${done ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{c.descripcion}</p>
                     </div>
                     {(() => {
-                      const macros = estimarMacrosComida(c.descripcion, dieta, dieta.comidas.length);
+                      const macros = macrosDeComida(c, dieta);
                       if (!macros) return null;
                       return (
                         <div className="flex gap-1 shrink-0">
@@ -269,8 +282,14 @@ Responde SOLO con JSON sin markdown: [{"descripcion": "opción 1 con ingrediente
                             <span className="text-emerald-400 text-xs font-black shrink-0">#{j+1}</span>
                             <p className="text-xs text-slate-300 flex-1 leading-relaxed">{op.descripcion || op}</p>
                           </div>
+                          {op.proteina != null && (
+                            <p className="text-xs font-bold text-slate-400 mb-2">
+                              <span className="text-orange-400">{op.kcal} kcal</span> · <span className="text-blue-400">P {op.proteina}g</span> · <span className="text-yellow-400">C {op.carbs}g</span> · <span className="text-pink-400">G {op.grasas}g</span>
+                            </p>
+                          )}
                           <button onClick={() => {
-                            elegirAlternativa(op.descripcion || op, c.momento, selectedDay, i);
+                            elegirAlternativa(op.descripcion || op, c.momento, selectedDay, i,
+                              op.proteina != null ? { kcal: op.kcal, proteina: op.proteina, carbs: op.carbs, grasas: op.grasas } : null);
                             setAltComidas(prev => ({ ...prev, [altKey]: { show: false } }));
                           }}
                             className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1">

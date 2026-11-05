@@ -13,7 +13,7 @@ const MealSwapModal = ({ onClose, currentPlan }) => {
       setLoading(true);
       setError('');
       const prompt = `Basándote en este plan de dieta: "${currentPlan || 'Plan de nutrición general balanceado'}"
-Sugiere exactamente 3 alimentos alternativos del mercado latinoamericano.
+Sugiere exactamente 3 alimentos alternativos que se consigan en México, de preferencia de la cocina mexicana casera.
 Devuelve ESTRICTAMENTE este JSON y nada más:
 [{"name":"nombre y cantidad","match":numero,"pro":numero,"cho":numero,"fat":numero,"tag":"etiqueta"},{"name":"nombre y cantidad","match":numero,"pro":numero,"cho":numero,"fat":numero,"tag":"etiqueta"},{"name":"nombre y cantidad","match":numero,"pro":numero,"cho":numero,"fat":numero,"tag":"etiqueta"}]`;
       const response = await callGemini(prompt, SYSTEM_PROMPTS.MEAL_SWAPPER);

@@ -19,6 +19,8 @@ Pruebas que no se pudieron hacer en su momento. Al hacerlas, mover el resultado 
 - [ ] **Hotmart cancelación de suscripción:** tras el deploy, reenviar "Cancelación de suscripción" desde el panel de Hotmart → el log debe mostrar el correo (no `null`) y quitar premium si la cuenta existe.
 - [ ] **Después de publicar las reglas nuevas** (con cuenta normal de cliente): abrir la app, marcar una comida, cambiar modo oscuro, calificar el día → todo guarda sin errores. Con cuenta coach: enviar plan a un cliente. Con admin: activar/quitar premium a un usuario.
 - [ ] **Revisar que nadie se haya dado permisos:** en el panel admin, ver qué usuarios tienen `admin` o `role: coach` y confirmar que cada uno sea legítimo.
+- [ ] **Platillos mexicanos + macros por comida:** generar un plan nuevo → platillos caseros mexicanos, cada comida con macros distintos que sumen el total del día. Pedir alternativa de desayuno y de colación → solo platillos de ese momento, con kcal y macros visibles.
+- [ ] **Dominio:** abrir https://fittrackpro.store y https://www.fittrackpro.store (debe redirigir), iniciar sesión, y probar que el regreso de pago de Mercado Pago (`?pago=exitoso`) cae en el dominio.
 - [ ] **Limpiar cuenta de prueba:** proyecto.fittrackpro@gmail.com quedó premium por la prueba de "Compra aprobada" de Hotmart; quitárselo desde el panel admin si no debe serlo. Borrar en Firestore `premiumPendiente/testeComprador271101postman15@example.com` si existe.
 - [ ] **Webhook Mercado Pago:** cambiar la URL en el panel de MP a `/api/webhook` y hacer un pago/suscripción de prueba → el usuario queda premium y recibe el correo.
 - [ ] **Hotmart con compra real:** comprar con un correo que ya tenga cuenta en FitTrack → queda premium y llega el correo. (El panel de Hotmart ya responde 200.)
@@ -31,6 +33,32 @@ Pruebas que no se pudieron hacer en su momento. Al hacerlas, mover el resultado 
 - **Clave con letras cirílicas `entrenarонHoy`** en `/coach/dashboard-metricas` y en el frontend que la lee. Funciona porque ambos lados usan la misma clave rara; arreglar los dos a la vez.
 
 ## 2026-11-04
+
+### ✅ Dominio fittrackpro.store → Cloudflare Worker
+- **Hallazgo:** el dominio (Namecheap) apuntaba con registros A a `31.97.115.207`, el VPS que ya no existe → `fittrackpro.store` no abría la app. Tenía reenvío de correo de Namecheap (MX `eforward`), que Jesús confirmó que no usa.
+- **Cambio:** nameservers de Namecheap → Cloudflare (zona activa 2026-11-04). Se borraron los A del VPS. `wrangler.jsonc`: `routes` con `custom_domain` para `fittrackpro.store` y `www.fittrackpro.store` (respaldo `wrangler.backup.dominio.jsonc`). Redirección www → raíz con una Redirect Rule de Cloudflare (corre antes del Worker; el Worker solo ve `/api/*` primero).
+- **Resultado (Jesús, 18:25):** deploy, Redirect Rule y prueba en el dominio salieron bien ✅.
+- **Pendiente:** borrar los servicios de Render. Opcional: borrar los MX/TXT de Namecheap en el DNS de Cloudflare.
+
+### ⚠️ Macros por comida reales + alternativas según el momento del día
+- **Problema (reportado por Jesús con captura):** desayuno y media mañana mostraban los mismos macros (32/29/12). `estimarMacrosComida` dividía los macros del día entre el número de comidas y buscaba "desayuno" dentro del texto del platillo (casi nunca estaba) → todas iguales. Además "Ver alternativa" solo mandaba el texto del platillo: la IA no sabía si era desayuno o cena ni qué macros cumplir.
+- **Cambio:**
+  - `worker/prompts.js`: reglas nuevas en el bloque de cocina — cada platillo propio de su momento (desayuno, colación ligera, plato fuerte, cena ligera); cada comida trae `kcal/proteina/carbs/grasas`; la suma del día debe cuadrar (±5%); reparto orientativo 25/35/25 + colaciones. Ejemplos de JSON con macros por comida también en `OnboardingFlow.jsx` y `CoachDashboard.jsx`.
+  - `src/utils/metrics.js`: `macrosDeComida(comida, dieta)` usa los macros de la IA si existen; en planes viejos reparte los del día según el momento (ya no salen iguales).
+  - `DietaTab.jsx`: la alternativa manda el momento, la meta de macros de esa comida y lo que ya come ese día (para no repetir); pide solo platillos de ese momento; muestra kcal y macros de cada opción y los guarda en el plan al elegirla.
+  - `ClientDashboard.jsx`: si la alternativa ya trae macros, se registra sin otra llamada a la IA.
+  - Respaldos: `*.backup.macros.*`.
+- **Prueba local:** plan viejo de 5 comidas → desayuno 40/36/15, media mañana 13/11/5, comida 55/50/21, colación 13/11/5, cena 40/36/15; la suma cuadra con el día ✅ · plan nuevo usa los de la IA ✅ · los prompts incluyen las reglas ✅ · todo compila ✅.
+- **Falta prueba real:** pedir alternativa de desayuno y de colación (que no salga un plato fuerte) y regenerar un plan (que cada comida traiga macros distintos y sumen el total del día).
+
+### 🔄 Comidas: platillos mexicanos caseros en la IA
+- **Problema (reportado por Jesús):** la IA proponía comida "fitness" genérica, no platillos típicos mexicanos. Los prompts solo decían "alimentos accesibles en México" y el único ejemplo era "3 huevos con avena".
+- **Cambio:**
+  - `worker/prompts.js`: nuevo bloque `COCINA_MEXICANA` (ejemplos por tiempo de comida, ingredientes base, cómo ajustarlo a macros sin freír, cantidades, presupuesto, no repetir más de 2 veces por semana). Se agrega al agente de nutrición y al del plan semanal; el ejemplo del JSON ahora es "Huevos a la mexicana con tortillas y frijoles".
+  - `src/config/constants.js` (MEAL_SWAPPER), `DietaTab.jsx` (alternativas) y `MealSwapModal.jsx`: piden platillos caseros mexicanos con cantidades.
+  - Respaldos: `*.backup.mx.*`.
+- **Prueba local:** los prompts cargan y ambos agentes incluyen el bloque ✅ (se detectó y corrigió un error de orden: el bloque se usaba antes de definirse). Frontend compila ✅.
+- **Falta prueba real:** ver qué responde la IA (no se puede llamar a Gemini desde la sesión).
 
 ### ⚠️ Premium centralizado (H1) + reglas de Firestore endurecidas (H2)
 - **H1 — quien pagaba por webhook se quedaba con 3 días:** nuevo `worker/lib/premium.js` (`aplicarPremium`), único lugar que activa/quita premium. Siempre ajusta `plans.daysUnlocked` (7 premium / 3 gratis; a clientes de coach no les baja los días). Lo usan los webhooks de Hotmart y MP, `/verificar-pago`, `/admin/activar-premium` y `/admin/actualizar-plan-premium`.

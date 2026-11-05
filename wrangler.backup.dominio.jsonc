@@ -1,0 +1,25 @@
+/**
+ * FitTrack Pro — un solo Worker:
+ *   /api/*  → backend (worker/index.js)
+ *   resto   → frontend React compilado en ./dist
+ * Build: npm run build  →  Deploy: npx wrangler deploy
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fittrackpro-web",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Un solo Cron Trigger cada 15 min; worker/crons.js decide qué tarea toca según la hora de CDMX
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "FRONTEND_URL": "https://fittrackpro.store"
+  }
+}
